@@ -187,9 +187,9 @@
                             function(trip) {
                                 selectedTrip = JSON.parse(trip);
                                 //console.log('details found');
+                                draw();
                             }
                         );
-                        draw();
                     } else if (selectedTrip !== trip) {
                         selectedTrip = undefined;
                         draw();
@@ -202,15 +202,18 @@
                 var ws = new WebSocket("ws://localhost:8888/listen");
                 ws.onmessage = function(message) {
                     const ovPositions = JSON.parse(message.data);
-                    //console.log(ovPositions);
-                    const newPoints = ovPositions.reduce(
-                        function(mutations, ovPosition) {
-                            mutations[ovPosition.info.trip] = ovPosition;
-                            return mutations;
-                        },
-                        {}
-                    );
-                    points = Object.assign({}, points, newPoints);
+                    const newPoints = Object.assign({}, points);
+
+                    ovPositions.forEach(function(position) {
+                        if (position.info.active) {
+                            newPoints[position.info.trip] = position;
+                        } else {
+                            console.log('removed trip: ' + position.info.trip);
+                            delete newPoints[position.info.trip];
+                        }
+                    });
+
+                    points = newPoints;
                     draw();
                 };
 

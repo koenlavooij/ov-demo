@@ -2,15 +2,14 @@ package nl.trivento.fastdata.travelclear.gtfs
 
 import java.io.{File, FileOutputStream}
 import java.net.URL
+import java.util
 import java.util.zip.ZipFile
-import java.{io, util}
 
 import akka.actor._
 import org.onebusaway.csv_entities.ZipFileCsvInputSource
 import org.onebusaway.gtfs.impl.GtfsDaoImpl
-import org.onebusaway.gtfs.model.{AgencyAndId, IdentityBean, Trip}
+import org.onebusaway.gtfs.model.AgencyAndId
 import org.onebusaway.gtfs.serialization.GtfsReader
-import org.onebusaway.gtfs.services.GenericMutableDao
 import org.slf4j.LoggerFactory
 
 import scala.collection.JavaConverters._
@@ -18,17 +17,17 @@ import scala.collection.mutable
 import scala.language.postfixOps
 
 class TripInfoCollector extends GtfsDaoImpl {
+  private val logger = LoggerFactory.getLogger(classOf[TripInfoCollector])
   private val trips = mutable.Map.empty[String, TripInfo]
   private val stops = mutable.Map.empty[AgencyAndId, Stop]
   private val stopTimes = mutable.Map.empty[AgencyAndId, mutable.ListBuffer[StopTime]]
   private val shapePoints = mutable.Map.empty[AgencyAndId, mutable.ListBuffer[ShapePoint]]
 
   override def saveEntity(entity: scala.Any): Unit = {
-    super.saveEntity(entity)
-
     entity match {
       case s: org.onebusaway.gtfs.model.Stop =>
         stops.put(s.getId, Stop(s.getLat, s.getLon, s.getName))
+        super.saveEntity(entity)
       case s: org.onebusaway.gtfs.model.StopTime =>
         stops.get(s.getStop.getId).foreach(
           stop => stopTimes.getOrElseUpdate(s.getTrip.getId, new mutable.ListBuffer[StopTime])
@@ -38,6 +37,7 @@ class TripInfoCollector extends GtfsDaoImpl {
         shapePoints.getOrElseUpdate(s.getShapeId, new mutable.ListBuffer[ShapePoint]())
           .append(ShapePoint(s.getSequence, s.getLat, s.getLon))
       case _ =>
+        super.saveEntity(entity)
     }
   }
 
@@ -45,7 +45,7 @@ class TripInfoCollector extends GtfsDaoImpl {
   override def close(): Unit = {
     super.close()
 
-    println("Trips: " + getAllTrips.size())
+    logger.info("Trips: " + getAllTrips.size())
     for {
       trip <- getAllTrips.asScala
       stops <- stopTimes.get(trip.getId)
@@ -56,13 +56,13 @@ class TripInfoCollector extends GtfsDaoImpl {
         TripInfo(
           trip.getId.getId,
           stops.sortBy(_.seq).toList,
-          shape.sortBy(_.seq).toList
+          shape.sortBy(_.seq).toList,
         )
       )
 
       stopTimes.remove(trip.getId)
     }
-    println("Normalized trips: " + trips.size)
+    logger.info("Normalized trips: " + trips.size)
 
     super.clear()
   }
@@ -125,7 +125,11 @@ class PositionPublisher extends Actor {
   var mostRecent = Map.empty[String, TripPosition]
 
   private def publish(position: TripPosition): Unit = {
-    mostRecent = mostRecent + (position.info.trip -> position)
+    if (position.info.active) {
+      mostRecent = mostRecent + (position.info.trip -> position)
+    } else {
+      mostRecent = mostRecent - position.info.trip
+    }
     context.system.eventStream.publish(position)
   }
 
@@ -138,9 +142,17 @@ class PositionPublisher extends Actor {
 
   def receive: Receive = {
     case GetAllPositions() => sender() ! AllPositions(mostRecent.values.toSeq)
-    case DoUpdate() => for {
-      update <- gtfsRt.update()
-      position <- update.position
-    } checkUpdate(TripPosition(TripInfo(update.trip.get.tripId.get, null, null), position.latitude, position.longitude))
+    case DoUpdate() =>
+      val positions = gtfsRt.update()
+      var removed = mostRecent.keySet -- positions.flatMap(_.trip).flatMap(_.tripId).toSet
+
+      for {
+        update <- removed
+      } checkUpdate(TripPosition(TripRef(update, active = false), 0, 0))
+
+      for {
+        update <- positions
+        position <- update.position
+      } checkUpdate(TripPosition(TripRef(update.trip.get.tripId.get, active = true), position.latitude, position.longitude))
   }
 }

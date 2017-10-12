@@ -26,6 +26,7 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
   implicit val shapePointFormat = jsonFormat3(ShapePoint)
   implicit val stopFormat = jsonFormat3(Stop)
   implicit val stopTimeFormat = jsonFormat4(StopTime)
+  implicit val tripRefFormat = jsonFormat2(TripRef)
   implicit val tripInfoFormat = jsonFormat3(TripInfo)
 }
 
