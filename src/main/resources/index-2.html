@@ -1,0 +1,213 @@
+<html>
+    <head>
+        <title>Fast Data Demo</title>
+    </head>
+    <meta name="viewport" content="initial-scale=1.0">
+    <meta charset="utf-8">
+    <style>
+        /* Always set the map height explicitly to define the size of the div
+         * element that contains the map. */
+        #map {
+            height: 100%;
+        }
+        /* Optional: Makes the sample page fill the window. */
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+    </style>
+    <body>
+        <div id="map"></div>
+        <!-- AIzaSyASs9OE7muQPL6HwoSolRLmwfnBfurKgJY -->
+        <script async defer
+                src="https://maps.googleapis.com/maps/api/js?key=AIzaSyASs9OE7muQPL6HwoSolRLmwfnBfurKgJY&callback=initMap"
+                type="text/javascript"></script>
+        <script>
+            var HttpClient = function() {
+                this.get = function(aUrl, aCallback) {
+                    var anHttpRequest = new XMLHttpRequest();
+                    anHttpRequest.onreadystatechange = function() {
+                        if (anHttpRequest.readyState === 4 && anHttpRequest.status === 200)
+                            aCallback(anHttpRequest.responseText);
+                    };
+
+                    anHttpRequest.open( "GET", aUrl, true );
+                    anHttpRequest.send( null );
+                }
+            };
+
+            function toTime(t) {
+                var h = Math.floor(t / 3600);
+                var m = Math.floor((t - h * 3600) / 60);
+                return h + ":" + m;
+            }
+
+            var inScope = [];
+
+            function initMap() {
+                var map;
+                var overlay;
+                var selectedTrip;
+
+                function CanvasOverlay(map) {
+                    this.canvas = null;
+                    this.canvasContext = null;
+                    // this.mapCanvasContext = null;
+
+                    this.setMap(map);
+                }
+                CanvasOverlay.prototype = new google.maps.OverlayView();
+                CanvasOverlay.prototype.onAdd = function() {
+                    var canvas = document.createElement('canvas');
+                    canvas.style.display = 'block';
+                    canvas.top = 0;
+                    canvas.left = 0;
+                    canvas.height = window.innerHeight;
+                    canvas.width = window.innerWidth;
+                    this.canvas = canvas;
+                    this.canvasContext = canvas.getContext('2d');
+                    // this.canvasContext.translate(0.5, 0.5);
+                    // this.mapCanvasContext = new CanvasContextMap(this.canvasContext, this);
+
+                    // Add the element to the "overlayLayer" pane.
+                    this.getPanes().floatPane.appendChild(canvas);
+                };
+                CanvasOverlay.prototype.draw = function() {
+                    var buffer = document.createElement('canvas');
+                    buffer.style.display = 'block';
+                    buffer.top = 0;
+                    buffer.left = 0;
+                    buffer.height = this.canvas.height;
+                    buffer.width = this.canvas.width;
+                    var bufferContext = buffer.getContext('2d');
+
+                    const self = this;
+                    convert = function(p) {
+                        return self.getProjection().fromLatLngToDivPixel(p)
+                    };
+                    const size = Math.ceil((self.map.zoom * self.map.zoom) / 25);
+                    const halfSize = Math.ceil(size / 2);
+                    var count = 0;
+
+                    bufferContext.beginPath();
+                    bufferContext.fillStyle = 'rgba(220, 0, 0, ' + Math.min(1, Math.max(0, (self.map.zoom - 7) / 10)) + ')';
+                    console.log(bufferContext.fillStyle);
+                    inScope.length = 0;
+
+                    if (selectedTrip) {
+                        console.log(selectedTrip);
+
+                        var shape = selectedTrip.shapePoints.map(function (pt) {
+                            return convert(new google.maps.LatLng(pt.lat, pt.lng))
+                        });
+                        bufferContext.beginPath();
+                        bufferContext.moveTo(shape[0].x, shape[0].y);
+                        shape.slice(1).forEach(function (pt) {
+                                bufferContext.lineTo(pt.x, pt.y);
+                            }
+                        );
+                        bufferContext.stroke();
+
+                        selectedTrip.stopTime.map(function (st) {
+                            return {
+                                pt: convert(new google.maps.LatLng(st.stop.lat, st.stop.lng)),
+                                name: st.stop.name + ' @ ' + toTime(st.arrival)
+                            }
+                        })
+                        .forEach(function (stop) {
+                            console.log(stop.name);
+                            bufferContext.fillText(stop.pt.x, stop.pt.y, stop.name);
+                        });
+                    }
+
+                    bufferContext.font = '30x Verdana';
+                    bufferContext.fillStyle = 'Red';
+                    Object.values(points).forEach(function(position) {
+                        const xy = convert(new google.maps.LatLng(position.lat, position.lng));
+                        xy.x = Math.floor(xy.x);
+                        xy.y = Math.floor(xy.y);
+                        if (xy.x > 0 && xy.x < buffer.width && xy.y > 0 && xy.y < buffer.height) {
+                            bufferContext.rect(xy.x - halfSize, xy.y - halfSize, size, size);
+                            if (inScope.length === 0) {
+                                console.log(xy);
+                            }
+
+                            inScope.push({
+                                element: position,
+                                left: xy.x - halfSize,
+                                right: xy.x + halfSize,
+                                top: xy.y - halfSize,
+                                bottom: xy.y + halfSize
+                            });
+                            count++;
+                        }
+                    });
+                    bufferContext.stroke();
+
+                    this.canvasContext.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                    this.canvasContext.drawImage(buffer, 0, 0);
+
+                    console.log('drew ' + count + ' points');
+                };
+
+                map = new google.maps.Map(document.getElementById('map'), {
+                    center: {lat: 52.1533089, lng: 5.3593463},
+                    zoom: 7
+                });
+
+                map.addListener('center_changed', function() {
+                    console.log(overlay.get('bounds'), overlay.set('bounds', map.getBounds()));
+                    overlay.draw();
+                });
+
+                map.addListener('click', function(event) {
+                    //find selectedTrip
+                    console.log(event.pixel, inScope);
+
+                    var trip = inScope.find(function(pt) {
+                        return pt.left <= event.pixel.x && pt.right >= event.pixel.x &&
+                            pt.top <= event.pixel.y && pt.bottom >= event.pixel.y
+                    });
+
+                    console.log('trip: ', trip);
+                    if (trip && (!selectedTrip || selectedTrip.trip === trip.element.info.trip)) {
+                        new HttpClient().get("http://localhost:8888/trip/" + trip.element.info.trip,
+                            function(trip) {
+                                selectedTrip = JSON.parse(trip);
+                                console.log('details found');
+                            }
+                        );
+                        overlay.draw();
+                    } else if (selectedTrip !== trip) {
+                        selectedTrip = undefined;
+                        overlay.draw();
+                    }
+                });
+
+                var points = {};
+                var ignored = 0;
+
+                overlay = new CanvasOverlay(map);
+
+                var ws = new WebSocket("ws://localhost:8888/listen");
+                ws.onmessage = function(message) {
+                    const ovPositions = JSON.parse(message.data);
+                    //console.log(ovPositions);
+                    const newPoints = ovPositions.reduce(
+                        function(mutations, ovPosition) {
+                            mutations[ovPosition.info.trip] = ovPosition;
+                            return mutations;
+                        },
+                        {}
+                    );
+                    points = Object.assign({}, points, newPoints);
+                    overlay.draw();
+                };
+
+            }
+        </script>
+
+    </body>
+</html>
