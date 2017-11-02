@@ -19,6 +19,7 @@ import scala.language.postfixOps
 class TripInfoCollector extends GtfsDaoImpl {
   private val logger = LoggerFactory.getLogger(classOf[TripInfoCollector])
   private val trips = mutable.Map.empty[String, TripInfo]
+  private val tripsRt = mutable.Map.empty[String, TripInfo]
   private val stops = mutable.Map.empty[AgencyAndId, Stop]
   private val stopTimes = mutable.Map.empty[AgencyAndId, mutable.ListBuffer[StopTime]]
   private val shapePoints = mutable.Map.empty[AgencyAndId, mutable.ListBuffer[ShapePoint]]
@@ -46,28 +47,26 @@ class TripInfoCollector extends GtfsDaoImpl {
     super.close()
 
     logger.info("Trips: " + getAllTrips.size())
-    for {
-      trip <- getAllTrips.asScala
-      stops <- stopTimes.get(trip.getId)
-      shape <- shapePoints.get(trip.getShapeId)
-    } {
-      trips.put(
+    getAllTrips.asScala.foreach(trip => {
+      val info = TripInfo(
         trip.getId.getId,
-        TripInfo(
-          trip.getId.getId,
-          stops.sortBy(_.seq).toList,
-          shape.sortBy(_.seq).toList,
-        )
+        trip.getRoute.getShortName + " " + trip.getRoute.getLongName,
+        stopTimes.get(trip.getId).map(_.sortBy(_.seq).toList),
+        shapePoints.get(trip.getShapeId).map(_.sortBy(_.seq).toList),
       )
+      trips.put(trip.getId.getId, info)
+      tripsRt.put(trip.getRealtimeTripId(), info)
+    })
 
-      stopTimes.remove(trip.getId)
-    }
+    stopTimes.clear()
+    shapePoints.clear()
     logger.info("Normalized trips: " + trips.size)
 
     super.clear()
   }
 
   def getTripInfo(tripId: String): Option[TripInfo] = trips.get(tripId)
+  def getTripInfoByRtId(tripId: String): Option[TripInfo] = tripsRt.get(tripId)
 }
 
 class TripReader {
@@ -81,14 +80,16 @@ class TripReader {
     classOf[org.onebusaway.gtfs.model.Route],
     classOf[org.onebusaway.gtfs.model.Stop],
     classOf[org.onebusaway.gtfs.model.Trip],
+    classOf[org.onebusaway.gtfs.model.ServiceCalendarDate],
+    classOf[org.onebusaway.gtfs.model.ServiceCalendar],
     classOf[org.onebusaway.gtfs.model.StopTime]).toList.asJavaCollection))
   reader.setEntityStore(dao)
-//  reader.setInputSource(new ZipFileCsvInputSource(new ZipFile(
-//    download("http://gtfs.ovapi.nl/openov-nl/gtfs-openov-nl.zip")
-//  )))
   reader.setInputSource(new ZipFileCsvInputSource(new ZipFile(
-    new File("/Users/koen/Downloads/gtfs-openov-nl.zip")
+    download("http://gtfs.ovapi.nl/openov-nl/gtfs-openov-nl.zip")
   )))
+//  reader.setInputSource(new ZipFileCsvInputSource(new ZipFile(
+//    new File("/Users/koen/Downloads/gtfs-openov-nl.zip")
+//  )))
 
   logger.info("Reading file")
   reader.run()
@@ -114,6 +115,7 @@ class TripReader {
   }
 
   def getTripInfo(tripId: String): Option[TripInfo] = dao.getTripInfo(tripId)
+  def getTripInfoByRtId(tripId: String): Option[TripInfo] = dao.getTripInfoByRtId(tripId)
 }
 
 case class DoUpdate()
@@ -126,15 +128,15 @@ class PositionPublisher extends Actor {
 
   private def publish(position: TripPosition): Unit = {
     if (position.info.active) {
-      mostRecent = mostRecent + (position.info.trip -> position)
+      mostRecent = mostRecent + (position.info.tripId -> position)
     } else {
-      mostRecent = mostRecent - position.info.trip
+      mostRecent = mostRecent - position.info.tripId
     }
     context.system.eventStream.publish(position)
   }
 
   private def checkUpdate(position: TripPosition): Unit = {
-    mostRecent.get(position.info.trip) match {
+    mostRecent.get(position.info.tripId) match {
       case Some(value) if value == position =>
       case _ => publish(position)
     }

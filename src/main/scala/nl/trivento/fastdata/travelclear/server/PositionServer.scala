@@ -7,12 +7,13 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.ws.TextMessage
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.server.{Route, StandardRoute}
+import akka.http.scaladsl.server.Route
 import akka.stream.{ActorMaterializer, Materializer, OverflowStrategy, ThrottleMode}
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import nl.trivento.fastdata.travelclear.gtfs._
+import nl.trivento.fastdata.travelclear.ndovloket._
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext
@@ -27,7 +28,7 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
   implicit val stopFormat = jsonFormat3(Stop)
   implicit val stopTimeFormat = jsonFormat4(StopTime)
   implicit val tripRefFormat = jsonFormat2(TripRef)
-  implicit val tripInfoFormat = jsonFormat3(TripInfo)
+  implicit val tripInfoFormat = jsonFormat4(TripInfo)
 }
 
 object PositionServer extends JsonSupport with DefaultJsonProtocol {
@@ -42,12 +43,31 @@ object PositionServer extends JsonSupport with DefaultJsonProtocol {
   }
 
   def start(): Unit = {
-    val reader = new TripReader()
-    val publisher = actorSystem.actorOf(Props[PositionPublisher].withMailbox("minimal-mailbox"))
+    val tripReader = new TripReader()
+    val kv6Parser = KV6PositiesParser.create(tripReader)
+    val nsParser = NsPositiesParser.create(tripReader)
 
-    actorSystem.scheduler.schedule(1.seconds, 30.seconds) {
-      publisher ! DoUpdate()
-    }
+    new OvLoketZmqClient(null).connect(
+      Subscription(
+        "tcp://pubsub.besteffort.ndovloket.nl:7658",
+        (source: scala.io.Source) => kv6Parser
+          .parse(source)
+          .getAs[TripPosition]("ov")
+          .foreach(_.foreach(actorSystem.eventStream.publish(_))),
+        "/CXX/KV6posinfo", "/ARR/KV6posinfo", "/DITP/KV6posinfo", "/GVB/KV6posinfo", "/QBUZZ/KV6posinfo", "/RIG/KV6posinfo", "/Syntus/KV6posinfo"),
+
+      Subscription(
+        "tcp://pubsub.besteffort.ndovloket.nl:7664",
+        (source: scala.io.Source) => nsParser
+          .parse(source)
+          .getAs[TripPosition]("trein")
+          .foreach(_.foreach(actorSystem.eventStream.publish(_))),
+        "/RIG/NStreinpositiesInterface5"))
+
+    val publisher = actorSystem.actorOf(Props[PositionPublisher].withMailbox("minimal-mailbox"))
+//    actorSystem.scheduler.schedule(1.seconds, 30.seconds) {
+//      publisher ! DoUpdate()
+//    }
 
     val route: Flow[HttpRequest, HttpResponse, NotUsed] = Route.handlerFlow(
       get {
@@ -61,7 +81,7 @@ object PositionServer extends JsonSupport with DefaultJsonProtocol {
         } ~
         pathPrefix("trip") {
           path(Remaining) {
-            tail => reader.getTripInfo(tail)
+            tail => tripReader.getTripInfo(tail)
               .map(ti => complete(ti))
               .getOrElse(reject)
           }

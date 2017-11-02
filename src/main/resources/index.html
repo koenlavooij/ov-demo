@@ -42,10 +42,15 @@
                 }
             };
 
+            function zeroPadPrefix(n) {
+                if (n.toString().length === 1) return "0" + n.toString();
+                return n.toString();
+            }
+
             function toTime(t) {
                 var h = Math.floor(t / 3600);
                 var m = Math.floor((t - h * 3600) / 60);
-                return h + ":" + m;
+                return zeroPadPrefix(h % 24) + ":" + zeroPadPrefix(m);
             }
 
             var inScope = [];
@@ -123,6 +128,7 @@
                                 bufferContext.lineTo(pt.x, pt.y);
                             }
                         );
+                        bufferContext.strokeStyle = 'dashed 2px red';
                         bufferContext.stroke();
 
                         bufferContext.font = '12px Oxygen Light red';
@@ -138,12 +144,19 @@
                             });
                     }
 
-                    bufferContext.fillStyle = 'red';
                     Object.values(points).forEach(function(position) {
                         const xy = convert(new google.maps.LatLng(position.lat, position.lng));
                         xy.x = Math.floor(xy.x);
                         xy.y = Math.floor(xy.y);
                         if (xy.x > 0 && xy.x < buffer.width && xy.y > 0 && xy.y < buffer.height) {
+                            if (selectedTrip && selectedTrip.trip === position.info.trip) {
+                                bufferContext.fillStyle = 'red';
+                                bufferContext.font = '12px Oxygen';
+                                bufferContext.fillText(selectedTrip.name, xy.x, xy.y);
+                            } else {
+                                bufferContext.fillStyle = 'blue';
+                            }
+
                             bufferContext.beginPath();
                             bufferContext.arc(xy.x - halfSize, xy.y - halfSize, size, 0, 2 * Math.PI, false);
                             bufferContext.fill();
