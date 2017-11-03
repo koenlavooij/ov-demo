@@ -27,8 +27,8 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
   implicit val shapePointFormat = jsonFormat3(ShapePoint)
   implicit val stopFormat = jsonFormat3(Stop)
   implicit val stopTimeFormat = jsonFormat4(StopTime)
-  implicit val tripRefFormat = jsonFormat2(TripRef)
-  implicit val tripInfoFormat = jsonFormat4(TripInfo)
+  implicit val tripRefFormat = jsonFormat5(TripRef)
+  implicit val tripInfoFormat = jsonFormat6(TripInfo)
 }
 
 object PositionServer extends JsonSupport with DefaultJsonProtocol {
@@ -54,7 +54,8 @@ object PositionServer extends JsonSupport with DefaultJsonProtocol {
           .parse(source)
           .getAs[TripPosition]("ov")
           .foreach(_.foreach(actorSystem.eventStream.publish(_))),
-        "/CXX/KV6posinfo", "/ARR/KV6posinfo", "/DITP/KV6posinfo", "/GVB/KV6posinfo", "/QBUZZ/KV6posinfo", "/RIG/KV6posinfo", "/Syntus/KV6posinfo"),
+        "/CXX/KV6posinfo", "/ARR/KV6posinfo", "/DITP/KV6posinfo", "/GVB/KV6posinfo", "/QBUZZ/KV6posinfo",
+        "/RIG/KV6posinfo", "/Syntus/KV6posinfo"),
 
       Subscription(
         "tcp://pubsub.besteffort.ndovloket.nl:7664",
@@ -64,10 +65,12 @@ object PositionServer extends JsonSupport with DefaultJsonProtocol {
           .foreach(_.foreach(actorSystem.eventStream.publish(_))),
         "/RIG/NStreinpositiesInterface5"))
 
-    val publisher = actorSystem.actorOf(Props[PositionPublisher].withMailbox("minimal-mailbox"))
-//    actorSystem.scheduler.schedule(1.seconds, 30.seconds) {
-//      publisher ! DoUpdate()
-//    }
+    val publisher = new PositionPublisher(tripReader, actorSystem)
+    val positions = actorSystem.actorOf(Props[PositionState])
+
+    actorSystem.scheduler.schedule(1.seconds, 30.seconds) {
+      publisher.update()
+    }
 
     val route: Flow[HttpRequest, HttpResponse, NotUsed] = Route.handlerFlow(
       get {
@@ -88,9 +91,9 @@ object PositionServer extends JsonSupport with DefaultJsonProtocol {
         } ~
         path("listen") {
           val state: Source[TextMessage, NotUsed] =
-            Source.actorRef[AllPositions](65536, OverflowStrategy.dropHead).mapMaterializedValue {
+            Source.actorRef[State](65536, OverflowStrategy.dropHead).mapMaterializedValue {
               outActor => {
-                publisher.tell(GetAllPositions(), outActor)
+                positions.tell(GetState(), outActor)
                 NotUsed
               }
             }

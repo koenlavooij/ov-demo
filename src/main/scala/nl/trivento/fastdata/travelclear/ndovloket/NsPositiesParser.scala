@@ -36,7 +36,7 @@ object NsPositiesParser {
           nummer <- result.getSingleString("treinnummer")
           delen <- result.getAs[Position]("treindeel").map(_.head)
           tripInfo <- tripReader.getTripInfoByRtId(s"IFF:$nummer")
-        } yield TripPosition(TripRef(tripInfo.tripId, active = true), delen.longitude, delen.latitude)
+        } yield TripPosition(TripRef(tripInfo.tripId, active = true, tripInfo.name, tripInfo.color, tripInfo.textColor), delen.latitude, delen.longitude)
       )
     })
   }
@@ -69,7 +69,7 @@ object KV6PositiesParser {
           y <- result.getSingleString("y")
           tripInfo <- tripReader.getTripInfoByRtId(s"$owner:$line:$journey")
           ll = LatLng.fromRijksdriehoek(x.toInt, y.toInt)
-        } yield TripPosition(TripRef(tripInfo.tripId, active = true), ll.getLatitude, ll.getLongitude)
+        } yield TripPosition(TripRef(tripInfo.tripId, active = true, tripInfo.name, tripInfo.color, tripInfo.textColor), ll.getLatitude, ll.getLongitude)
       )
       case onEnd(_) => EmbeddedResult[TripPosition](
         "ov", {
@@ -82,7 +82,7 @@ object KV6PositiesParser {
           line <- result.getSingleString("line")
           journey <- result.getSingleString("journey")
           tripInfo <- tripReader.getTripInfoByRtId(s"$owner:$line:$journey")
-        } yield TripPosition(TripRef(tripInfo.tripId, active = false), 0, 0)
+        } yield TripPosition(TripRef(tripInfo.tripId, active = false, tripInfo.name, "#ffc917", "#003082"), 0, 0)
       )
     })
   }

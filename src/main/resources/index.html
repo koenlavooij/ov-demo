@@ -16,7 +16,6 @@
             margin: 0;
             padding: 0;
         }
-        #wrapper { position: relative; }
         #over_map { position: absolute; top: 0; left: 0; z-index: 99; pointer-events: none; }
     </style>
     <body>
@@ -149,17 +148,19 @@
                         xy.x = Math.floor(xy.x);
                         xy.y = Math.floor(xy.y);
                         if (xy.x > 0 && xy.x < buffer.width && xy.y > 0 && xy.y < buffer.height) {
-                            if (selectedTrip && selectedTrip.trip === position.info.trip) {
+                            if (selectedTrip && selectedTrip.tripId === position.info.tripId) {
                                 bufferContext.fillStyle = 'red';
                                 bufferContext.font = '12px Oxygen';
                                 bufferContext.fillText(selectedTrip.name, xy.x, xy.y);
                             } else {
-                                bufferContext.fillStyle = 'blue';
+                                bufferContext.fillStyle = position.info.color;
+                                bufferContext.strokeStyle = position.info.textColor;
                             }
 
                             bufferContext.beginPath();
                             bufferContext.arc(xy.x - halfSize, xy.y - halfSize, size, 0, 2 * Math.PI, false);
                             bufferContext.fill();
+                            bufferContext.stroke();
                             inScope.push({
                                 element: position,
                                 left: xy.x - size,
@@ -195,8 +196,9 @@
                     });
 
                     //console.log('trip: ', trip);
-                    if (trip && (!selectedTrip || selectedTrip.trip !== trip.element.info.trip)) {
-                        new HttpClient().get("http://localhost:8888/trip/" + trip.element.info.trip,
+                    //console.log(trip);
+                    if (trip && (!selectedTrip || selectedTrip.trip !== trip.element.info.tripId)) {
+                        new HttpClient().get("http://localhost:8888/trip/" + trip.element.info.tripId,
                             function(trip) {
                                 selectedTrip = JSON.parse(trip);
                                 //console.log('details found');
@@ -214,7 +216,6 @@
 
                 var ws = new WebSocket("ws://localhost:8888/listen");
                 ws.onmessage = function(message) {
-                    //console.log(message.data);
                     const ovPositions = JSON.parse(message.data);
                     const newPoints = Object.assign({}, points);
 
@@ -222,12 +223,11 @@
                         if (position.info.active) {
                             newPoints[position.info.tripId] = position;
                         } else {
-                            console.log('removed trip: ' + position.info.tripId);
+                            //console.log('removed trip: ' + position.info.tripId);
                             delete newPoints[position.info.tripId];
                         }
                     });
 
-                    console.log(newPoints);
                     points = newPoints;
                     draw();
                 };

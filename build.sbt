@@ -12,6 +12,12 @@ libraryDependencies += "com.typesafe.akka" %% "akka-http-spray-json" % "10.0.10"
 libraryDependencies += "com.typesafe.akka" %% "akka-stream" % "2.5.6"
 libraryDependencies += "com.typesafe.akka" %% "akka-actor" % "2.5.6"
 libraryDependencies += "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.8.7"
+libraryDependencies += "org.zeromq" % "jeromq" % "0.4.2"
+libraryDependencies += "org.scala-lang.modules" % "scala-xml_2.12" % "1.0.6"
+libraryDependencies += "org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.6"
+libraryDependencies += "commons-io" % "commons-io" % "2.3"
+
+libraryDependencies += "org.scalatest" % "scalatest_2.12" % "3.0.4" % "test"
 
 PB.targets in Compile := Seq(
   scalapb.gen() -> (sourceManaged in Compile).value
