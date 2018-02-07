@@ -134,12 +134,12 @@
                         bufferContext.fillStyle = 'solid red';
                         selectedTrip.stopTime.map(function (st) {
                             return {
-                                pt: convert(new google.maps.LatLng(st.stop.lat, st.stop.lng)),
-                                name: st.stop.name + ' @ ' + toTime(st.arrival)
+                                pt: convert(new google.maps.LatLng(st.node.lat, st.node.lng)),
+                                name: st.node.name + ' @ ' + toTime(st.arrival)
                             }
                         })
-                            .forEach(function (stop) {
-                                bufferContext.fillText(stop.name, stop.pt.x, stop.pt.y);
+                            .forEach(function (node) {
+                                bufferContext.fillText(node.name, node.pt.x, node.pt.y);
                             });
                     }
 

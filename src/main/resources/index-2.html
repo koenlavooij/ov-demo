@@ -112,13 +112,13 @@
 
                         selectedTrip.stopTime.map(function (st) {
                             return {
-                                pt: convert(new google.maps.LatLng(st.stop.lat, st.stop.lng)),
-                                name: st.stop.name + ' @ ' + toTime(st.arrival)
+                                pt: convert(new google.maps.LatLng(st.node.lat, st.node.lng)),
+                                name: st.node.name + ' @ ' + toTime(st.arrival)
                             }
                         })
-                        .forEach(function (stop) {
-                            console.log(stop.name);
-                            bufferContext.fillText(stop.pt.x, stop.pt.y, stop.name);
+                        .forEach(function (node) {
+                            console.log(node.name);
+                            bufferContext.fillText(node.pt.x, node.pt.y, node.name);
                         });
                     }
 
