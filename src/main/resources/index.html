@@ -115,9 +115,44 @@
                     //console.log(bufferContext.fillStyle);
                     inScope.length = 0;
 
+                    Object.values(points).forEach(function(position) {
+                        const xy = convert(new google.maps.LatLng(position.lat, position.lng));
+                        xy.x = Math.floor(xy.x);
+                        xy.y = Math.floor(xy.y);
+                        if (xy.x > 0 && xy.x < buffer.width && xy.y > 0 && xy.y < buffer.height) {
+                            if (selectedTrip && selectedTrip.tripId === position.info.tripId) {
+                                bufferContext.globalAlpha = 1;
+                                bufferContext.fillStyle = 'red';
+                                bufferContext.font = '12px Oxygen';
+                                bufferContext.fillText(selectedTrip.name, xy.x, xy.y);
+                            } else if (selectedTrip) {
+                                bufferContext.globalAlpha = 0.2;
+                                bufferContext.fillStyle = position.info.color;
+                                bufferContext.strokeStyle = position.info.textColor;
+                            } else {
+                                bufferContext.globalAlpha = 1;
+                                bufferContext.fillStyle = position.info.color;
+                                bufferContext.strokeStyle = position.info.textColor;
+                            }
+
+                            bufferContext.beginPath();
+                            bufferContext.arc(xy.x - halfSize, xy.y - halfSize, size, 0, 2 * Math.PI, false);
+                            bufferContext.fill();
+                            bufferContext.stroke();
+                            inScope.push({
+                                element: position,
+                                left: xy.x - size,
+                                right: xy.x + size,
+                                top: xy.y - size,
+                                bottom: xy.y + size
+                            });
+                            count++;
+                        }
+                    });
+
                     if (selectedTrip) {
                         console.log(selectedTrip);
-
+                        bufferContext.globalAlpha = 1;
                         var shape = selectedTrip.shapePoints.map(function (pt) {
                             return convert(new google.maps.LatLng(pt.lat, pt.lng))
                         });
@@ -143,34 +178,7 @@
                             });
                     }
 
-                    Object.values(points).forEach(function(position) {
-                        const xy = convert(new google.maps.LatLng(position.lat, position.lng));
-                        xy.x = Math.floor(xy.x);
-                        xy.y = Math.floor(xy.y);
-                        if (xy.x > 0 && xy.x < buffer.width && xy.y > 0 && xy.y < buffer.height) {
-                            if (selectedTrip && selectedTrip.tripId === position.info.tripId) {
-                                bufferContext.fillStyle = 'red';
-                                bufferContext.font = '12px Oxygen';
-                                bufferContext.fillText(selectedTrip.name, xy.x, xy.y);
-                            } else {
-                                bufferContext.fillStyle = position.info.color;
-                                bufferContext.strokeStyle = position.info.textColor;
-                            }
 
-                            bufferContext.beginPath();
-                            bufferContext.arc(xy.x - halfSize, xy.y - halfSize, size, 0, 2 * Math.PI, false);
-                            bufferContext.fill();
-                            bufferContext.stroke();
-                            inScope.push({
-                                element: position,
-                                left: xy.x - size,
-                                right: xy.x + size,
-                                top: xy.y - size,
-                                bottom: xy.y + size
-                            });
-                            count++;
-                        }
-                    });
                     //bufferContext.stroke();
 
                     canvasContext.clearRect(0, 0, canvas.width, canvas.height);
