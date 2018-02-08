@@ -134,8 +134,8 @@
                         bufferContext.fillStyle = 'solid red';
                         selectedTrip.stopTime.map(function (st) {
                             return {
-                                pt: convert(new google.maps.LatLng(st.node.lat, st.node.lng)),
-                                name: st.node.name + ' @ ' + toTime(st.arrival)
+                                pt: convert(new google.maps.LatLng(st.lat, st.lng)),
+                                name: st.name + ' @ ' + toTime(st.arrival)
                             }
                         })
                             .forEach(function (node) {
